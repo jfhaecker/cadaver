@@ -1,8 +1,10 @@
 package main
 
 import (
-	"crypto/sha256"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
+	"hash"
 	"io/ioutil"
 )
 
@@ -12,55 +14,99 @@ var (
 	index = make(map[string]GitObject)
 )
 
+type Hash [sha1.Size]byte
+
+func (h Hash) Hex() string {
+	s := hex.EncodeToString(h[:])
+	return s
+}
+
+func (h Hash) Array() []byte {
+	return h[:]
+}
+
+type Hasher struct {
+	hash.Hash
+}
+
+func NewHasher() Hasher {
+	h := Hasher{sha1.New()}
+	return h
+}
+
+func (h Hasher) Write(content []byte) {
+	h.Hash.Write(content)
+}
+
+func (h Hasher) Sum() (hash Hash) {
+	copy(hash[:], h.Hash.Sum(nil))
+	return
+}
+
 type GitObject interface {
 	Type() []byte
 	DoHash()
-	GetHashCode() []byte
+	ID() Hash
 	Store()
-	GetOFilename() string
-	CreateFileContent()
+	Path() string
+	//createFileContent()
 }
 
 type Tree struct {
-	ofilename string
-	nfilename string
-	children  []GitObject
-	content   []byte
-	hashCode  []byte
+	path     string
+	children []GitObject
+	content  []byte
+	hashCode Hash
 }
 
 func (t *Tree) Store() {
-	ioutil.WriteFile(t.nfilename, t.content, 0644)
+	t.createFileContent()
+	ioutil.WriteFile(t.ID().Hex(), t.content, 0644)
 }
 
 func (t *Tree) DoHash() {
-	h := sha256.New()
+	h := NewHasher()
 	for _, child := range t.children {
-		h.Write(child.GetHashCode())
+		h.Write(child.ID().Array())
 	}
-	t.hashCode = h.Sum(nil)
-	t.nfilename = fmt.Sprintf("%x", t.hashCode)
+	t.hashCode = h.Sum()
+}
 
+func (b *Tree) ID() Hash {
+	return b.hashCode
 }
 
 func (t Tree) Type() []byte {
 	return []byte("tree")
 }
 
-type Blob struct {
-	content     []byte
-	ofilename   string
-	nfilename   string
-	hashCode    []byte
-	filecontent []byte
+func (t *Tree) createFileContent() {
+	header := []byte{}
+	header = append(t.Type(), []byte(newline)...)
+	t.content = append(t.content, header...)
+	for _, child := range t.children {
+		c := fmt.Sprintf("%v %x %v \n",
+			string(child.Type()),
+			child.ID(),
+			child.Path())
+		t.content = append(t.content, []byte(c)...)
+	}
 }
 
-func (b *Blob) CreateFileContent() {
-	b.filecontent = []byte{}
-	header := []byte{}
-	header = append(b.Type(), []byte(newline)...)
-	b.filecontent = append(header, b.content...)
-	b.nfilename = fmt.Sprintf("%x", b.hashCode)
+type Blob struct {
+	content []byte
+	path    string
+	//nfilename   string
+	hashCode Hash
+	//filecontent []byte
+}
+
+func (b *Blob) createFileContent() []byte {
+	filecontent := []byte{}
+	filecontent = append(b.Type(), []byte(newline)...)
+	filecontent = append(filecontent, b.content...)
+	//b.nfilename = fmt.Sprintf("%x", b.ID().Hex())
+	return filecontent
 }
 
 func (b Blob) Type() []byte {
@@ -68,22 +114,23 @@ func (b Blob) Type() []byte {
 }
 
 func (b *Blob) DoHash() {
-	h := sha256.New()
+	h := NewHasher()
 	h.Write([]byte(b.content))
-	b.hashCode = h.Sum(nil)
+	b.hashCode = h.Sum()
 }
 
-func (b *Blob) GetOFilename() string {
-	return b.ofilename
+func (b *Blob) Path() string {
+	return b.path
 }
 
-func (b *Blob) GetHashCode() []byte {
+func (b *Blob) ID() Hash {
 	return b.hashCode
 }
 
 func (b *Blob) Store() {
 	//fmt.Printf("---> %v Storing: [%v]\n", b.nfilename, string(b.content))
-	ioutil.WriteFile(b.nfilename, b.filecontent, 0644)
+	filecontent := b.createFileContent()
+	ioutil.WriteFile(b.ID().Hex(), filecontent, 0644)
 
 }
 
@@ -98,11 +145,9 @@ func main() {
 	commit()
 }
 
-func add(content []byte, filename string) {
-	b := Blob{content: content, ofilename: filename}
-	index[filename] = &b
-	//index = append(index, &b)
-	//fmt.Printf("%v\n", b.nfilename)
+func add(content []byte, path string) {
+	b := Blob{content: content, path: path}
+	index[path] = &b
 }
 
 func commit() {
@@ -111,26 +156,13 @@ func commit() {
 	tree.children = make([]GitObject, 0)
 	for _, obj := range index {
 		obj.DoHash()
-		//fmt.Printf("Hallo:%v\n", obj)
+		//fmt.Printf("Hallo:%#v\n", obj)
 		obj.Store()
 		tree.children = append(tree.children, obj)
 		//hc := fmt.Sprintf("%x", obj.GetHashCode)
 		//fmt.Printf("%v:%x\n", string(obj.Type()), obj.GetHashCode())
 	}
-	header := []byte{}
-	header = append(tree.Type(), []byte(newline)...)
-	tree.content = append(tree.content, header...)
-	for _, child := range tree.children {
-		c := fmt.Sprintf("%v %x %v \n",
-			string(child.Type()),
-			child.GetHashCode(),
-			child.GetOFilename())
-		tree.content = append(tree.content, []byte(c)...)
-		//fmt.Printf("%v", c)
-
-	}
 	tree.DoHash()
-	fmt.Printf("Tree : %x\n", string(tree.hashCode))
-	fmt.Printf("%v\n", string(tree.content))
+	fmt.Printf("Tree : %v\n", tree.ID().Hex())
 	tree.Store()
 }
