@@ -1,52 +1,19 @@
 package main
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
 	"fmt"
-	"hash"
 	"io/ioutil"
 )
 
 var (
 	newline = "\n"
-	//index   = make([]GitObject, 0)
-	index = make(map[string]GitObject)
+	index   = make(map[string]GitObject)
 )
-
-type Hash [sha1.Size]byte
-
-func (h Hash) Hex() string {
-	s := hex.EncodeToString(h[:])
-	return s
-}
-
-func (h Hash) Array() []byte {
-	return h[:]
-}
-
-type Hasher struct {
-	hash.Hash
-}
-
-func NewHasher() Hasher {
-	h := Hasher{sha1.New()}
-	return h
-}
-
-func (h Hasher) Write(content []byte) {
-	h.Hash.Write(content)
-}
-
-func (h Hasher) Sum() (hash Hash) {
-	copy(hash[:], h.Hash.Sum(nil))
-	return
-}
 
 type GitObject interface {
 	Type() []byte
 	DoHash()
-	ID() Hash
+	ID() Hashcode
 	Store()
 	Path() string
 	//createFileContent()
@@ -56,7 +23,7 @@ type Tree struct {
 	path     string
 	children []GitObject
 	content  []byte
-	hashCode Hash
+	hashCode Hashcode
 }
 
 func (t *Tree) Store() {
@@ -65,14 +32,15 @@ func (t *Tree) Store() {
 }
 
 func (t *Tree) DoHash() {
-	h := NewHasher()
+	code := []byte{}
 	for _, child := range t.children {
-		h.Write(child.ID().Array())
+		code = append(code, child.ID().Array()...)
+		//h.Write(child.ID().Array())
 	}
-	t.hashCode = h.Sum()
+	t.hashCode = ComputeHash(t.Type(), code)
 }
 
-func (b *Tree) ID() Hash {
+func (b *Tree) ID() Hashcode {
 	return b.hashCode
 }
 
@@ -94,11 +62,9 @@ func (t *Tree) createFileContent() {
 }
 
 type Blob struct {
-	content []byte
-	path    string
-	//nfilename   string
-	hashCode Hash
-	//filecontent []byte
+	content  []byte
+	path     string
+	hashCode Hashcode
 }
 
 func (b *Blob) createFileContent() []byte {
@@ -114,16 +80,18 @@ func (b Blob) Type() []byte {
 }
 
 func (b *Blob) DoHash() {
-	h := NewHasher()
-	h.Write([]byte(b.content))
-	b.hashCode = h.Sum()
+	//fmt.Printf("---->%v\n", b.Path())
+	//h := NewHasher(b.Type(), b.content, int64(len(b.content)))
+	//h.Write(b.content)
+
+	b.hashCode = ComputeHash(b.Type(), b.content)
 }
 
 func (b *Blob) Path() string {
 	return b.path
 }
 
-func (b *Blob) ID() Hash {
+func (b *Blob) ID() Hashcode {
 	return b.hashCode
 }
 
@@ -163,6 +131,7 @@ func commit() {
 		//fmt.Printf("%v:%x\n", string(obj.Type()), obj.GetHashCode())
 	}
 	tree.DoHash()
-	fmt.Printf("Tree : %v\n", tree.ID().Hex())
 	tree.Store()
+	fmt.Printf("Tree : %v\n", tree.ID().Hex())
+	fmt.Printf("Tree : %v\n", string(tree.content))
 }
