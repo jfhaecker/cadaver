@@ -3,11 +3,13 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 )
 
 var (
 	newline = "\n"
 	index   = make(map[string]GitObject)
+	workDir = "work"
 )
 
 type GitObject interface {
@@ -28,14 +30,13 @@ type Tree struct {
 
 func (t *Tree) Store() {
 	t.createFileContent()
-	ioutil.WriteFile(t.ID().Hex(), t.content, 0644)
+	ioutil.WriteFile(workDir+"/"+t.ID().Hex(), t.content, 0644)
 }
 
 func (t *Tree) DoHash() {
 	code := []byte{}
 	for _, child := range t.children {
 		code = append(code, child.ID().Array()...)
-		//h.Write(child.ID().Array())
 	}
 	t.hashCode = ComputeHash(t.Type(), code)
 }
@@ -71,7 +72,6 @@ func (b *Blob) createFileContent() []byte {
 	filecontent := []byte{}
 	filecontent = append(b.Type(), []byte(newline)...)
 	filecontent = append(filecontent, b.content...)
-	//b.nfilename = fmt.Sprintf("%x", b.ID().Hex())
 	return filecontent
 }
 
@@ -80,10 +80,6 @@ func (b Blob) Type() []byte {
 }
 
 func (b *Blob) DoHash() {
-	//fmt.Printf("---->%v\n", b.Path())
-	//h := NewHasher(b.Type(), b.content, int64(len(b.content)))
-	//h.Write(b.content)
-
 	b.hashCode = ComputeHash(b.Type(), b.content)
 }
 
@@ -96,13 +92,16 @@ func (b *Blob) ID() Hashcode {
 }
 
 func (b *Blob) Store() {
-	//fmt.Printf("---> %v Storing: [%v]\n", b.nfilename, string(b.content))
 	filecontent := b.createFileContent()
-	ioutil.WriteFile(b.ID().Hex(), filecontent, 0644)
-
+	ioutil.WriteFile(workDir+"/"+b.ID().Hex(), filecontent, 0644)
 }
 
 func main() {
+
+	if _, err := os.Stat(workDir); os.IsNotExist(err) {
+		os.Mkdir(workDir, 0755)
+	}
+
 	add([]byte("hallo1"), "1.txt")
 	add([]byte("hola1"), "2.txt")
 	add([]byte("servus1"), "3.txt")
@@ -124,11 +123,8 @@ func commit() {
 	tree.children = make([]GitObject, 0)
 	for _, obj := range index {
 		obj.DoHash()
-		//fmt.Printf("Hallo:%#v\n", obj)
 		obj.Store()
 		tree.children = append(tree.children, obj)
-		//hc := fmt.Sprintf("%x", obj.GetHashCode)
-		//fmt.Printf("%v:%x\n", string(obj.Type()), obj.GetHashCode())
 	}
 	tree.DoHash()
 	tree.Store()
