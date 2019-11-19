@@ -1,6 +1,8 @@
 package lib
 
-import "io/ioutil"
+import (
+	"io"
+)
 
 type Blob struct {
 	Content  []byte
@@ -31,7 +33,9 @@ func (b *Blob) ID() Hashcode {
 	return b.hashCode
 }
 
-func (b *Blob) Store(workDir string) {
-	filecontent := b.createFileContent()
-	ioutil.WriteFile(workDir+"/"+b.ID().Hex(), filecontent, 0644)
+func (b *Blob) Store(writer io.Writer) {
+	writer.Write(b.createFileContent())
+	//filecontent := b.createFileContent()
+	//ioutil.WriteFile(workDir+"/"+b.ID().Hex(), filecontent, 0644)
+
 }

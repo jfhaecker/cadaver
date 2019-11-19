@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"cadaver/internal/lib"
 	"fmt"
 	"os"
@@ -38,11 +39,17 @@ func commit() {
 	tree.Children = make([]lib.GitObject, 0)
 	for _, obj := range index {
 		obj.DoHash()
-		obj.Store(workDir)
+		file, _ := os.Open(workDir + "/" + obj.ID().Hex())
+		obj.Store(file)
 		tree.Children = append(tree.Children, obj)
 	}
 	tree.DoHash()
-	tree.Store(workDir)
-	fmt.Printf("Tree : %v\n", tree.ID().Hex())
-	fmt.Printf("Tree : %v\n", string(tree.Content))
+	file, _ := os.Open(workDir + "/" + tree.ID().Hex())
+	tree.Store(file)
+
+	fmt.Printf("Tree ID=%v\n", tree.ID().Hex())
+	var b bytes.Buffer
+	tree.Store(&b)
+	fmt.Printf(b.String())
+
 }

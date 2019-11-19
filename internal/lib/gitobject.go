@@ -1,10 +1,11 @@
 package lib
 
+import "io"
+
 type GitObject interface {
 	Type() []byte
 	DoHash()
 	ID() Hashcode
-	Store(workDir string)
+	Store(io.Writer)
 	Path() string
-	//createFileContent()
 }
